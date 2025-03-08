@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: choco-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: choco
+  template:
+    metadata:
+      labels:
+        app: choco
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: choco-prediction
+        image: pureev7/choco_prediction:latest
+        ports:
+        - containerPort: 5000
