@@ -1,12 +1,11 @@
 from flask import Flask, request, jsonify
-import joblib
+import mlflow.pyfunc
 import numpy as np
-
+import mlflow
 app = Flask(__name__)
 
-# Загрузка модели
-model = joblib.load('choco_model.joblib')
-
+model_uri = 'models:/WineApp/Production'
+model = mlflow.pyfunc.load_model(model_uri)
 
 @app.route('/predict', methods=['POST'])
 def predict():
