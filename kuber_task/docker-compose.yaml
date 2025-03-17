@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mlflow:
+    build: .
+    command: >
+      bash -c "sleep 15 &&
+      mlflow server --backend-store-uri postgresql://airflow:airflow@postgres/airflow
+      --default-artifact-root s3://mlflow/artifacts
+      --host 0.0.0.0
+      --port 5001"
+    ports:
+      - "5001:5001"
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: minio123
+    depends_on:
+      postgres:
+        condition: service_healthy
+  minio:
+    image: minio/minio
+    command: server /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    volumes:
+      - minio_data:/data
+
+  airflow-init:
+    build: .
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    command: bash -c "airflow db init && airflow users create --username airflow --password airflow --firstname Admin --lastname Admin --role Admin --email admin@example.com"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-webserver:
+    build: .
+    command: bash -c "sleep 20 && airflow webserver"
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+    depends_on:
+      - airflow-init
+      - mlflow
+    volumes:
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+
+  airflow-scheduler:
+    build: .
+    command: bash -c "sleep 25 && airflow scheduler"
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+    depends_on:
+      - airflow-init
+      - mlflow
+    volumes:
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+
+  flask-app:
+    build: .
+    command: bash -c "sleep 30 && gunicorn --chdir ./flask_app --bind :5000 --workers 2 --timeout 300 app:app"
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+    depends_on:
+      - mlflow
+    volumes:
+      - ./requirements.txt:/opt/airflow/requirements.txt
+      - ./flask_app:/opt/airflow/flask_app
+
+volumes:
+  postgres_data:
+  minio_data:

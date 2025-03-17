@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wine-model-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: wine-model-app
+  template:
+    metadata:
+      labels:
+        app: wine-model-app
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: wine-prediction
+        image: pureev7/wine-model-app:latest
+        ports:
+        - containerPort: 5000
+        env:
+          - name: ML_FLASK_ENV
+            value: "http://localhost:5000"
